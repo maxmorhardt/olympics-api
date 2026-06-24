@@ -1,0 +1,140 @@
+package repository
+
+import (
+	"context"
+
+	"github.com/google/uuid"
+	"github.com/maxmorhardt/olympics-api/internal/model"
+	"gorm.io/gorm"
+)
+
+type TournamentRepository interface {
+	GetByID(ctx context.Context, id uuid.UUID) (*model.Tournament, error)
+	GetAll(ctx context.Context) ([]model.Tournament, error)
+	CountActive(ctx context.Context) (int64, error)
+	GetParticipants(ctx context.Context, tournamentID uuid.UUID) ([]model.Participant, error)
+	GetTeams(ctx context.Context, tournamentID uuid.UUID) ([]model.Team, error)
+	GetGroups(ctx context.Context, tournamentID uuid.UUID) ([]model.Group, error)
+
+	Create(ctx context.Context, tournament *model.Tournament) error
+	UpdateStatus(ctx context.Context, id uuid.UUID, status model.TournamentStatus) error
+	AddParticipants(ctx context.Context, participants []*model.Participant) error
+
+	CreateTeamsAndAssign(ctx context.Context, teams []*model.Team, participants []*model.Participant) error
+	CreateGroupsAndAssign(ctx context.Context, groups []*model.Group, teams []*model.Team) error
+}
+
+type tournamentRepository struct {
+	db *gorm.DB
+}
+
+func NewTournamentRepository(db *gorm.DB) TournamentRepository {
+	return &tournamentRepository{
+		db: db,
+	}
+}
+
+func (r *tournamentRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Tournament, error) {
+	var tournament model.Tournament
+	err := r.db.WithContext(ctx).
+		Preload("Participants").
+		Preload("Teams.Members").
+		Preload("Groups.Teams.Members").
+		First(&tournament, "id = ?", id).Error
+
+	return &tournament, err
+}
+
+func (r *tournamentRepository) GetAll(ctx context.Context) ([]model.Tournament, error) {
+	var tournaments []model.Tournament
+	err := r.db.WithContext(ctx).Order("created_at DESC").Find(&tournaments).Error
+	return tournaments, err
+}
+
+func (r *tournamentRepository) CountActive(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&model.Tournament{}).
+		Where("status != ?", model.TournamentStatusFinished).
+		Count(&count).Error
+	return count, err
+}
+
+func (r *tournamentRepository) GetParticipants(ctx context.Context, tournamentID uuid.UUID) ([]model.Participant, error) {
+	var participants []model.Participant
+	err := r.db.WithContext(ctx).Where("tournament_id = ?", tournamentID).Find(&participants).Error
+	return participants, err
+}
+
+func (r *tournamentRepository) GetTeams(ctx context.Context, tournamentID uuid.UUID) ([]model.Team, error) {
+	var teams []model.Team
+	err := r.db.WithContext(ctx).
+		Preload("Members").
+		Where("tournament_id = ?", tournamentID).
+		Order("seed ASC").
+		Find(&teams).Error
+	return teams, err
+}
+
+func (r *tournamentRepository) GetGroups(ctx context.Context, tournamentID uuid.UUID) ([]model.Group, error) {
+	var groups []model.Group
+	err := r.db.WithContext(ctx).
+		Preload("Teams.Members").
+		Where("tournament_id = ?", tournamentID).
+		Order("name ASC").
+		Find(&groups).Error
+	return groups, err
+}
+
+func (r *tournamentRepository) Create(ctx context.Context, tournament *model.Tournament) error {
+	return r.db.WithContext(ctx).Create(tournament).Error
+}
+
+func (r *tournamentRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status model.TournamentStatus) error {
+	return r.db.WithContext(ctx).
+		Model(&model.Tournament{}).
+		Where("id = ?", id).
+		Update("status", status).Error
+}
+
+func (r *tournamentRepository) AddParticipants(ctx context.Context, participants []*model.Participant) error {
+	if len(participants) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Create(participants).Error
+}
+
+func (r *tournamentRepository) CreateTeamsAndAssign(ctx context.Context, teams []*model.Team, participants []*model.Participant) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(teams).Error; err != nil {
+			return err
+		}
+
+		// assign each participant to its generated team
+		for _, p := range participants {
+			if err := tx.Model(&model.Participant{}).Where("id = ?", p.ID).Update("team_id", p.TeamID).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+}
+
+func (r *tournamentRepository) CreateGroupsAndAssign(ctx context.Context, groups []*model.Group, teams []*model.Team) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(groups).Error; err != nil {
+			return err
+		}
+
+		// assign each team to its group and persist its seed
+		for _, t := range teams {
+			if err := tx.Model(&model.Team{}).Where("id = ?", t.ID).
+				Updates(map[string]any{"group_id": t.GroupID, "seed": t.Seed}).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+}
