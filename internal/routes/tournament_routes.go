@@ -29,4 +29,5 @@ func RegisterTournamentRoutes(rg *gin.RouterGroup, h handler.TournamentHandler, 
 
 func RegisterMatchRoutes(rg *gin.RouterGroup, h handler.MatchHandler, verifier middleware.TokenVerifier) {
 	rg.PATCH("/:matchId/result", middleware.AuthMiddleware(verifier), h.RecordResult)
+	rg.POST("/:matchId/rollback", middleware.AuthMiddleware(verifier), h.RollbackResult)
 }

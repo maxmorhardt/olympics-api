@@ -28,4 +28,6 @@ var (
 	ErrMatchAlreadyCompleted = errors.New("match result has already been recorded")
 	ErrTieNotAllowed         = errors.New("matches cannot end in a tie")
 	ErrMatchNotReady         = errors.New("both teams must be set before recording a result")
+	ErrMatchNotCompleted     = errors.New("this match has no recorded result to undo")
+	ErrRollbackLocked        = errors.New("this result can no longer be changed")
 )
