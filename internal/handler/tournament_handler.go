@@ -239,8 +239,6 @@ func (h *tournamentHandler) SwapPlayers(c *gin.Context) {
 	c.JSON(http.StatusOK, tournament)
 }
 
-// parseID parses a UUID path param, writing a 400 response and returning false
-// when the value is missing or malformed.
 func parseID(c *gin.Context, param string) (uuid.UUID, bool) {
 	id, err := uuid.Parse(c.Param(param))
 	if err != nil {

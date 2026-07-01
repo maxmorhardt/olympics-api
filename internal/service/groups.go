@@ -87,12 +87,6 @@ func (s *tournamentService) GenerateGroups(ctx context.Context, id uuid.UUID, us
 	return s.repo.GetGroups(ctx, id)
 }
 
-// scheduleGroupMatches builds a single round-robin per group and aligns the groups
-// so that every group plays its nth round in the same global round. A 6-team group
-// is 5 rounds of 3 matches (everyone plays every round); two groups fill all six
-// equipment stations (2 darts, 2 bocce, 2 cornhole) so the whole field plays at
-// once. Within each round games are assigned to balance every team's games and
-// respect equipment, so a team plays each game at least once across the stage.
 func scheduleGroupMatches(tournamentID uuid.UUID, groups []*model.Group, groupedTeams [][]*model.Team) []*model.Match {
 	// round-robin matchings (circle method) for each group
 	groupMatchings := make([][][][2]uuid.UUID, len(groupedTeams))
@@ -155,9 +149,6 @@ func scheduleGroupMatches(tournamentID uuid.UUID, groups []*model.Group, grouped
 	return matches
 }
 
-// roundRobinMatchings returns a 1-factorization of the teams via the circle
-// method: each inner slice is one round of simultaneous, disjoint matches, and
-// every pair meets exactly once. An odd count gets a bye each round.
 func roundRobinMatchings(ids []uuid.UUID) [][][2]uuid.UUID {
 	arr := append([]uuid.UUID{}, ids...)
 	if len(arr)%2 == 1 {
@@ -187,9 +178,6 @@ func roundRobinMatchings(ids []uuid.UUID) [][][2]uuid.UUID {
 	return rounds
 }
 
-// pickGame chooses a game for a match within a round: it must have a free station
-// this round, and among those it prefers the game both teams have played least so
-// each team's three games stay balanced.
 func pickGame(roundUsage, aCount, bCount map[string]int) string {
 	best := ""
 	bestScore := math.MaxInt

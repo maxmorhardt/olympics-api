@@ -18,16 +18,12 @@ const (
 	wsSendBuffer = 32
 )
 
-// Broadcaster lets the domain services fan out real-time updates without
-// knowing about the websocket transport.
 type Broadcaster interface {
 	Broadcast(tournamentID uuid.UUID, msg *model.WSMessage)
 }
 
 type WebSocketService interface {
 	Broadcaster
-	// Register attaches a connection to a tournament's room and blocks until it
-	// disconnects, so the caller (the HTTP handler) holds the request open.
 	Register(tournamentID uuid.UUID, conn *websocket.Conn)
 }
 
@@ -35,8 +31,6 @@ type wsClient struct {
 	send chan []byte
 }
 
-// websocketService is an in-process hub. With a single replica there is no need
-// for NATS; every connection is held in memory and broadcasts go out directly.
 type websocketService struct {
 	mu    sync.RWMutex
 	rooms map[uuid.UUID]map[*wsClient]bool
@@ -96,6 +90,8 @@ func (s *websocketService) Register(tournamentID uuid.UUID, conn *websocket.Conn
 func (s *websocketService) writePump(conn *websocket.Conn, client *wsClient, done <-chan struct{}) {
 	ticker := time.NewTicker(wsPingPeriod)
 	defer ticker.Stop()
+	// close the connection on write failure so Register's read loop unblocks
+	defer func() { _ = conn.Close() }()
 
 	for {
 		select {

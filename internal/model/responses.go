@@ -1,6 +1,7 @@
 package model
 
 import "github.com/google/uuid"
+
 type TeamStanding struct {
 	TeamID        uuid.UUID `json:"teamId"`
 	TeamName      string    `json:"teamName"`

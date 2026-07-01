@@ -68,9 +68,6 @@ func (s *tournamentService) GeneratePlayoffs(ctx context.Context, id uuid.UUID, 
 	return s.matchRepo.GetByTournamentAndStage(ctx, id, model.MatchStagePlayoff)
 }
 
-// seedQualifiers ranks every team across all groups purely by record (wins).
-// All teams advance, and teams with the same number of wins are ordered randomly,
-// so equal records get a random matchup in the bracket.
 func seedQualifiers(standings []model.GroupStandings) []uuid.UUID {
 	var rows []model.TeamStanding
 	for _, gs := range standings {
@@ -92,9 +89,6 @@ func seedQualifiers(standings []model.GroupStandings) []uuid.UUID {
 	return qualifiers
 }
 
-// buildBracket creates a full single-elimination bracket for the seeded
-// qualifiers, padding to a power of two with byes for the top seeds and linking
-// each match to the next round via NextMatchID/NextSlot.
 func buildBracket(tournamentID uuid.UUID, qualifiers []uuid.UUID, gameTypes []string) []*model.Match {
 	q := len(qualifiers)
 	bracketSize := 1
@@ -182,8 +176,7 @@ func buildBracket(tournamentID uuid.UUID, qualifiers []uuid.UUID, gameTypes []st
 		}
 	}
 
-	// flatten final-round-first so a match is always inserted after the match it
-	// references via NextMatchID (satisfies the self-referential foreign key)
+	// flatten final-round-first so each match is inserted after the one it references
 	var matches []*model.Match
 	for r := rounds; r >= 1; r-- {
 		matches = append(matches, matchesByRound[r]...)
@@ -192,9 +185,6 @@ func buildBracket(tournamentID uuid.UUID, qualifiers []uuid.UUID, gameTypes []st
 	return matches
 }
 
-// seedPositions returns the seed number (1-based) sitting at each bracket
-// position for a bracket of the given power-of-two size, using standard
-// tournament seeding so the top seeds are spread apart.
 func seedPositions(size int) []int {
 	seeds := []int{1}
 	for len(seeds) < size {

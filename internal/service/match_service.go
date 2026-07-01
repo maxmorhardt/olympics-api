@@ -105,7 +105,11 @@ func (s *matchService) RecordResult(ctx context.Context, matchID uuid.UUID, req 
 }
 
 func (s *matchService) broadcastScore(ctx context.Context, match *model.Match) {
+	// default from the match stage so a DB error does not misreport the stage
 	status := model.TournamentStatusGroupStage
+	if match.Stage == model.MatchStagePlayoff {
+		status = model.TournamentStatusPlayoffs
+	}
 	if t, err := s.tournamentRepo.GetByID(ctx, match.TournamentID); err == nil {
 		status = t.Status
 	}

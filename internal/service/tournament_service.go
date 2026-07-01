@@ -64,10 +64,6 @@ var gameCapacity = map[string]int{
 	"Cornhole": 2,
 }
 
-// ====================
-// Getters
-// ====================
-
 func (s *tournamentService) GetTournaments(ctx context.Context) ([]model.Tournament, error) {
 	return s.repo.GetAll(ctx)
 }
@@ -83,12 +79,6 @@ func (s *tournamentService) GetTournament(ctx context.Context, id uuid.UUID) (*m
 	return tournament, nil
 }
 
-// ====================
-// Setup
-// ====================
-
-// authorizeTournament permits an action only for the tournament creator or an
-// olympics admin.
 func authorizeTournament(t *model.Tournament, user string, isAdmin bool) error {
 	if isAdmin || t.CreatedBy == user {
 		return nil
@@ -165,10 +155,6 @@ func (s *tournamentService) AddParticipants(ctx context.Context, id uuid.UUID, n
 	return s.GetTournament(ctx, id)
 }
 
-// ====================
-// Team generation
-// ====================
-
 func (s *tournamentService) GenerateTeams(ctx context.Context, id uuid.UUID, user string, isAdmin bool) ([]model.Team, error) {
 	log := util.LoggerFromContext(ctx)
 
@@ -195,8 +181,7 @@ func (s *tournamentService) GenerateTeams(ctx context.Context, id uuid.UUID, use
 		return nil, errs.ErrNotEnoughParticipants
 	}
 
-	// shuffle participants then chunk into teams of teamSize, distributing any
-	// leftover members across the existing teams so nobody is left on a tiny team
+	// shuffle then chunk into teams, spreading any leftover across existing teams
 	if err := shuffleParticipants(participants); err != nil {
 		return nil, err
 	}
@@ -259,10 +244,6 @@ func shuffleParticipants(participants []model.Participant) error {
 	}
 	return nil
 }
-
-// ====================
-// Edits & deletion
-// ====================
 
 func (s *tournamentService) DeleteTournament(ctx context.Context, id uuid.UUID, user string, isAdmin bool) error {
 	log := util.LoggerFromContext(ctx)

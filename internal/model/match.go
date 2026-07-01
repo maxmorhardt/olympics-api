@@ -21,8 +21,6 @@ const (
 	MatchStatusCompleted MatchStatus = "completed"
 )
 
-// Match models both a group-stage round-robin game and a single-elimination
-// playoff game. For playoff games NextMatchID/NextSlot link the winner forward.
 type Match struct {
 	ID           uuid.UUID   `json:"id" gorm:"type:uuid;primaryKey"`
 	TournamentID uuid.UUID   `json:"tournamentId" gorm:"type:uuid;index;not null"`
