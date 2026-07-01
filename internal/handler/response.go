@@ -13,13 +13,16 @@ import (
 // respondServiceError maps a service-layer sentinel error to an HTTP status.
 func respondServiceError(c *gin.Context, err error) {
 	switch {
-	case errors.Is(err, errs.ErrTournamentNotFound), errors.Is(err, errs.ErrMatchNotFound):
+	case errors.Is(err, errs.ErrTournamentNotFound),
+		errors.Is(err, errs.ErrMatchNotFound),
+		errors.Is(err, errs.ErrParticipantNotFound),
+		errors.Is(err, errs.ErrTeamNotFound):
 		writeError(c, http.StatusNotFound, err)
 	case errors.Is(err, errs.ErrUnauthorized), errors.Is(err, errs.ErrAdminRequired):
 		writeError(c, http.StatusForbidden, err)
 	case errors.Is(err, errs.ErrActiveTournament):
 		writeError(c, http.StatusConflict, err)
-	case errors.Is(err, errs.ErrInvalidRequestBody):
+	case errors.Is(err, errs.ErrInvalidRequestBody), errors.Is(err, errs.ErrInvalidSwap):
 		writeError(c, http.StatusBadRequest, err)
 	case errors.Is(err, errs.ErrNotEnoughParticipants),
 		errors.Is(err, errs.ErrTeamsAlreadyGenerated),

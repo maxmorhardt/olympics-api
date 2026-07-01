@@ -23,9 +23,17 @@ build: ## Build the binary (override OUT/MAIN/BUILD_FLAGS/LDFLAGS for cross-comp
 	@mkdir -p $(dir $(OUT))
 	go build $(BUILD_FLAGS) $(if $(LDFLAGS),-ldflags="$(LDFLAGS)",) -o $(OUT) $(MAIN)
 
+.PHONY: verify
+verify: ## Verify go module dependencies
+	go mod verify
+
 .PHONY: vet
 vet: ## Run go vet
 	go vet ./...
+
+.PHONY: lint
+lint: ## Run golangci-lint
+	golangci-lint run
 
 .PHONY: tidy
 tidy: ## Tidy go modules

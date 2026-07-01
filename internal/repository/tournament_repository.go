@@ -18,7 +18,10 @@ type TournamentRepository interface {
 
 	Create(ctx context.Context, tournament *model.Tournament) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, status model.TournamentStatus) error
+	Delete(ctx context.Context, id uuid.UUID) error
 	AddParticipants(ctx context.Context, participants []*model.Participant) error
+	UpdateTeamName(ctx context.Context, teamID uuid.UUID, name string) error
+	SwapPlayers(ctx context.Context, aID, aTeamID, bID, bTeamID uuid.UUID) error
 
 	CreateTeamsAndAssign(ctx context.Context, teams []*model.Team, participants []*model.Participant) error
 	CreateGroupsAndAssign(ctx context.Context, groups []*model.Group, teams []*model.Team) error
@@ -95,6 +98,27 @@ func (r *tournamentRepository) UpdateStatus(ctx context.Context, id uuid.UUID, s
 		Model(&model.Tournament{}).
 		Where("id = ?", id).
 		Update("status", status).Error
+}
+
+func (r *tournamentRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	// FK cascades remove participants, teams, groups, and matches
+	return r.db.WithContext(ctx).Delete(&model.Tournament{}, "id = ?", id).Error
+}
+
+func (r *tournamentRepository) UpdateTeamName(ctx context.Context, teamID uuid.UUID, name string) error {
+	return r.db.WithContext(ctx).
+		Model(&model.Team{}).
+		Where("id = ?", teamID).
+		Update("name", name).Error
+}
+
+func (r *tournamentRepository) SwapPlayers(ctx context.Context, aID, aTeamID, bID, bTeamID uuid.UUID) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&model.Participant{}).Where("id = ?", aID).Update("team_id", aTeamID).Error; err != nil {
+			return err
+		}
+		return tx.Model(&model.Participant{}).Where("id = ?", bID).Update("team_id", bTeamID).Error
+	})
 }
 
 func (r *tournamentRepository) AddParticipants(ctx context.Context, participants []*model.Participant) error {

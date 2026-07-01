@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	cryptorand "crypto/rand"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -27,23 +26,43 @@ type TournamentService interface {
 	GenerateGroups(ctx context.Context, id uuid.UUID, user string, isAdmin bool) ([]model.Group, error)
 	GeneratePlayoffs(ctx context.Context, id uuid.UUID, user string, isAdmin bool) ([]model.Match, error)
 
+	DeleteTournament(ctx context.Context, id uuid.UUID, user string, isAdmin bool) error
+	UpdateTeam(ctx context.Context, id, teamID uuid.UUID, name string, user string, isAdmin bool) (*model.Tournament, error)
+	SwapPlayers(ctx context.Context, id, participantAID, participantBID uuid.UUID, user string, isAdmin bool) (*model.Tournament, error)
+
 	GetStandings(ctx context.Context, id uuid.UUID) ([]model.GroupStandings, error)
 	GetBracket(ctx context.Context, id uuid.UUID) ([]model.Match, error)
 }
 
 type tournamentService struct {
-	repo      repository.TournamentRepository
-	matchRepo repository.MatchRepository
+	repo        repository.TournamentRepository
+	matchRepo   repository.MatchRepository
+	broadcaster Broadcaster
 }
 
-func NewTournamentService(repo repository.TournamentRepository, matchRepo repository.MatchRepository) TournamentService {
+func NewTournamentService(repo repository.TournamentRepository, matchRepo repository.MatchRepository, broadcaster Broadcaster) TournamentService {
 	return &tournamentService{
-		repo:      repo,
-		matchRepo: matchRepo,
+		repo:        repo,
+		matchRepo:   matchRepo,
+		broadcaster: broadcaster,
 	}
 }
 
-var defaultGameTypes = []string{"Cornhole", "Darts", "Ladder Ball", "Beer Pong"}
+// The tournament format is fixed and opinionated.
+const (
+	teamSize      = 2 // pairs (leftover odd person makes one team of 3)
+	teamsPerGroup = 6
+)
+
+// The three games and how many can run at once given the available equipment:
+// two of every station, so up to six games (twelve teams) run simultaneously.
+var groupGames = []string{"Darts", "Bocce", "Cornhole"}
+
+var gameCapacity = map[string]int{
+	"Darts":    2,
+	"Bocce":    2,
+	"Cornhole": 2,
+}
 
 // ====================
 // Getters
@@ -97,33 +116,10 @@ func (s *tournamentService) CreateTournament(ctx context.Context, req *model.Cre
 		return nil, errs.ErrActiveTournament
 	}
 
-	// fall back to sensible defaults so a minimal request still works
-	teamSize := req.TeamSize
-	if teamSize < 1 {
-		teamSize = 2
-	}
-	teamsPerGroup := req.TeamsPerGroup
-	if teamsPerGroup < 2 {
-		teamsPerGroup = 4
-	}
-	advancePerGroup := req.AdvancePerGroup
-	if advancePerGroup < 1 {
-		advancePerGroup = 2
-	}
-	gameTypes := req.GameTypes
-	if len(gameTypes) == 0 {
-		gameTypes = defaultGameTypes
-	}
-	gameTypesJSON, _ := json.Marshal(gameTypes)
-
 	tournament := &model.Tournament{
-		Name:            req.Name,
-		Status:          model.TournamentStatusSetup,
-		TeamSize:        teamSize,
-		TeamsPerGroup:   teamsPerGroup,
-		AdvancePerGroup: advancePerGroup,
-		GameTypes:       gameTypesJSON,
-		CreatedBy:       user,
+		Name:      req.Name,
+		Status:    model.TournamentStatusSetup,
+		CreatedBy: user,
 	}
 
 	if err := s.repo.Create(ctx, tournament); err != nil {
@@ -205,7 +201,7 @@ func (s *tournamentService) GenerateTeams(ctx context.Context, id uuid.UUID, use
 		return nil, err
 	}
 
-	teams, assigned := buildTeams(id, participants, tournament.TeamSize)
+	teams, assigned := buildTeams(id, participants, teamSize)
 
 	if err := s.repo.CreateTeamsAndAssign(ctx, teams, assigned); err != nil {
 		log.Error("failed to persist generated teams", "tournament_id", id, "error", err)
@@ -216,6 +212,7 @@ func (s *tournamentService) GenerateTeams(ctx context.Context, id uuid.UUID, use
 		return nil, err
 	}
 
+	s.broadcaster.Broadcast(id, model.NewTournamentUpdated(id, model.TournamentStatusTeamsGenerated))
 	log.Info("generated teams", "tournament_id", id, "teams", len(teams))
 	return s.repo.GetTeams(ctx, id)
 }
@@ -259,6 +256,109 @@ func shuffleParticipants(participants []model.Participant) error {
 		}
 		j := int(n.Int64())
 		participants[i], participants[j] = participants[j], participants[i]
+	}
+	return nil
+}
+
+// ====================
+// Edits & deletion
+// ====================
+
+func (s *tournamentService) DeleteTournament(ctx context.Context, id uuid.UUID, user string, isAdmin bool) error {
+	log := util.LoggerFromContext(ctx)
+
+	tournament, err := s.GetTournament(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := authorizeTournament(tournament, user, isAdmin); err != nil {
+		return err
+	}
+
+	if err := s.repo.Delete(ctx, id); err != nil {
+		log.Error("failed to delete tournament", "tournament_id", id, "error", err)
+		return err
+	}
+
+	s.broadcaster.Broadcast(id, model.NewTournamentDeleted(id))
+	log.Info("deleted tournament", "tournament_id", id)
+	return nil
+}
+
+func (s *tournamentService) UpdateTeam(ctx context.Context, id, teamID uuid.UUID, name string, user string, isAdmin bool) (*model.Tournament, error) {
+	tournament, err := s.GetTournament(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := authorizeTournament(tournament, user, isAdmin); err != nil {
+		return nil, err
+	}
+
+	if findTeam(tournament, teamID) == nil {
+		return nil, errs.ErrTeamNotFound
+	}
+
+	if err := s.repo.UpdateTeamName(ctx, teamID, name); err != nil {
+		return nil, err
+	}
+
+	s.broadcaster.Broadcast(id, model.NewTournamentUpdated(id, tournament.Status))
+	return s.GetTournament(ctx, id)
+}
+
+func (s *tournamentService) SwapPlayers(ctx context.Context, id, participantAID, participantBID uuid.UUID, user string, isAdmin bool) (*model.Tournament, error) {
+	tournament, err := s.GetTournament(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := authorizeTournament(tournament, user, isAdmin); err != nil {
+		return nil, err
+	}
+
+	// swapping is only safe before groups and the schedule are built
+	if tournament.Status != model.TournamentStatusTeamsGenerated {
+		return nil, errs.ErrInvalidStatus
+	}
+
+	a := findParticipant(tournament, participantAID)
+	b := findParticipant(tournament, participantBID)
+	if a == nil || b == nil {
+		return nil, errs.ErrParticipantNotFound
+	}
+	if a.TeamID == nil || b.TeamID == nil || *a.TeamID == *b.TeamID {
+		return nil, errs.ErrInvalidSwap
+	}
+
+	if err := s.repo.SwapPlayers(ctx, a.ID, *b.TeamID, b.ID, *a.TeamID); err != nil {
+		return nil, err
+	}
+
+	s.broadcaster.Broadcast(id, model.NewTournamentUpdated(id, tournament.Status))
+	return s.GetTournament(ctx, id)
+}
+
+func findParticipant(t *model.Tournament, participantID uuid.UUID) *model.Participant {
+	for i := range t.Participants {
+		if t.Participants[i].ID == participantID {
+			return &t.Participants[i]
+		}
+	}
+	// participants assigned to teams are loaded under Teams once generated
+	for i := range t.Teams {
+		for j := range t.Teams[i].Members {
+			if t.Teams[i].Members[j].ID == participantID {
+				return &t.Teams[i].Members[j]
+			}
+		}
+	}
+	return nil
+}
+
+func findTeam(t *model.Tournament, teamID uuid.UUID) *model.Team {
+	for i := range t.Teams {
+		if t.Teams[i].ID == teamID {
+			return &t.Teams[i]
+		}
 	}
 	return nil
 }

@@ -1,0 +1,48 @@
+name: Olympics API CI
+
+on:
+  push:
+    tags:
+      - '*'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  go-ci:
+    name: Go CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Verify dependencies
+        run: make verify
+
+      - name: Run go vet
+        run: make vet
+
+      - name: Run linter
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+
+      - name: Build
+        run: make build
+
+  docker-ci:
+    uses: maxmorhardt/workflows/.github/workflows/ci-docker.yml@main
+    needs: go-ci
+    with:
+      repository: ${{ github.repository }}
+      app_name: ${{ github.event.repository.name }}
+      app_version: ${{ github.event_name == 'push' && github.ref_name || 'ci' }}
+      push: ${{ github.event_name == 'push' }}
+    secrets: inherit

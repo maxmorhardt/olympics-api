@@ -3,12 +3,15 @@ package errs
 import "errors"
 
 var (
-	ErrTournamentNotFound = errors.New("tournament not found")
-	ErrMatchNotFound      = errors.New("match not found")
-	ErrInvalidRequestBody = errors.New("invalid request body")
-	ErrUnauthorized       = errors.New("only the tournament creator or an olympics admin can perform this action")
-	ErrAdminRequired      = errors.New("only an olympics admin can create a tournament")
-	ErrActiveTournament   = errors.New("a tournament is already in progress; only one is allowed at a time")
+	ErrTournamentNotFound  = errors.New("tournament not found")
+	ErrMatchNotFound       = errors.New("match not found")
+	ErrParticipantNotFound = errors.New("participant not found")
+	ErrTeamNotFound        = errors.New("team not found")
+	ErrInvalidRequestBody  = errors.New("invalid request body")
+	ErrUnauthorized        = errors.New("only the tournament creator or an olympics admin can perform this action")
+	ErrAdminRequired       = errors.New("only an olympics admin can create a tournament")
+	ErrActiveTournament    = errors.New("a tournament is already in progress; only one is allowed at a time")
+	ErrInvalidSwap         = errors.New("select two players from different teams to swap")
 )
 
 var (

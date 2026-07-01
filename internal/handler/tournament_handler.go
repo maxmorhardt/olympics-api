@@ -18,6 +18,9 @@ type TournamentHandler interface {
 	GenerateTeams(c *gin.Context)
 	GenerateGroups(c *gin.Context)
 	GeneratePlayoffs(c *gin.Context)
+	DeleteTournament(c *gin.Context)
+	UpdateTeam(c *gin.Context)
+	SwapPlayers(c *gin.Context)
 	GetStandings(c *gin.Context)
 	GetBracket(c *gin.Context)
 }
@@ -163,6 +166,77 @@ func (h *tournamentHandler) GetBracket(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, bracket)
+}
+
+func (h *tournamentHandler) DeleteTournament(c *gin.Context) {
+	id, ok := parseID(c, "id")
+	if !ok {
+		return
+	}
+
+	user, isAdmin := actor(c)
+	if err := h.tournamentService.DeleteTournament(c.Request.Context(), id, user, isAdmin); err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (h *tournamentHandler) UpdateTeam(c *gin.Context) {
+	id, ok := parseID(c, "id")
+	if !ok {
+		return
+	}
+	teamID, ok := parseID(c, "teamId")
+	if !ok {
+		return
+	}
+
+	var req model.UpdateNameRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, errs.ErrInvalidRequestBody)
+		return
+	}
+
+	user, isAdmin := actor(c)
+	tournament, err := h.tournamentService.UpdateTeam(c.Request.Context(), id, teamID, req.Name, user, isAdmin)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, tournament)
+}
+
+func (h *tournamentHandler) SwapPlayers(c *gin.Context) {
+	id, ok := parseID(c, "id")
+	if !ok {
+		return
+	}
+
+	var req model.SwapPlayersRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, errs.ErrInvalidRequestBody)
+		return
+	}
+
+	aID, err := uuid.Parse(req.ParticipantAId)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, errs.ErrInvalidRequestBody)
+		return
+	}
+	bID, err := uuid.Parse(req.ParticipantBId)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, errs.ErrInvalidRequestBody)
+		return
+	}
+
+	user, isAdmin := actor(c)
+	tournament, err := h.tournamentService.SwapPlayers(c.Request.Context(), id, aID, bID, user, isAdmin)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, tournament)
 }
 
 // parseID parses a UUID path param, writing a 400 response and returning false
