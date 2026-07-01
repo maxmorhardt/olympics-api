@@ -6,6 +6,8 @@ MAIN        ?= ./cmd/main.go
 OUT         ?= $(BIN_DIR)/$(BINARY)
 MIGRATE     := go run -tags postgres github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1
 MIGRATIONS  := internal/config/migrations
+COVER_FILE  ?= coverage.out
+RACE        ?=
 BUILD_FLAGS ?=
 LDFLAGS     ?=
 
@@ -34,6 +36,18 @@ vet: ## Run go vet
 .PHONY: lint
 lint: ## Run golangci-lint
 	golangci-lint run
+
+.PHONY: cover
+cover: ## Run unit tests with a coverage profile (no test suite yet, so this is a no-op gate)
+	go test $(RACE) -coverprofile=$(COVER_FILE) ./...
+
+.PHONY: test-integration
+test-integration: ## Run integration tests (none in this project)
+	@echo "no integration tests"
+
+.PHONY: cover-html
+cover-html: ## Generate an HTML coverage report from the coverage profile
+	go tool cover -html=$(COVER_FILE) -o coverage.html
 
 .PHONY: tidy
 tidy: ## Tidy go modules
