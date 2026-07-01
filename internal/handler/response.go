@@ -32,7 +32,9 @@ func respondServiceError(c *gin.Context, err error) {
 		errors.Is(err, errs.ErrInvalidStatus),
 		errors.Is(err, errs.ErrMatchAlreadyCompleted),
 		errors.Is(err, errs.ErrTieNotAllowed),
-		errors.Is(err, errs.ErrMatchNotReady):
+		errors.Is(err, errs.ErrMatchNotReady),
+		errors.Is(err, errs.ErrMatchNotCompleted),
+		errors.Is(err, errs.ErrRollbackLocked):
 		writeError(c, http.StatusConflict, err)
 	default:
 		writeError(c, http.StatusInternalServerError, errors.New("something went wrong"))

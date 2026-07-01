@@ -12,6 +12,7 @@ import (
 type MatchHandler interface {
 	GetMatches(c *gin.Context)
 	RecordResult(c *gin.Context)
+	RollbackResult(c *gin.Context)
 }
 
 type matchHandler struct {
@@ -52,6 +53,21 @@ func (h *matchHandler) RecordResult(c *gin.Context) {
 
 	user, isAdmin := actor(c)
 	match, err := h.matchService.RecordResult(c.Request.Context(), matchID, &req, user, isAdmin)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, match)
+}
+
+func (h *matchHandler) RollbackResult(c *gin.Context) {
+	matchID, ok := parseID(c, "matchId")
+	if !ok {
+		return
+	}
+
+	user, isAdmin := actor(c)
+	match, err := h.matchService.RollbackResult(c.Request.Context(), matchID, user, isAdmin)
 	if err != nil {
 		respondServiceError(c, err)
 		return
