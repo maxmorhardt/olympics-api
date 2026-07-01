@@ -38,7 +38,7 @@ lint: ## Run golangci-lint
 	golangci-lint run
 
 .PHONY: cover
-cover: ## Run unit tests with a coverage profile (no test suite yet, so this is a no-op gate)
+cover: ## Compile all packages and run any unit tests with a coverage profile (no coverage threshold)
 	go test $(RACE) -coverprofile=$(COVER_FILE) ./...
 
 .PHONY: test-integration

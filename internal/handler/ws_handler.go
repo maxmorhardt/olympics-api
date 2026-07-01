@@ -28,7 +28,9 @@ func NewWebSocketHandler(wsService service.WebSocketService, allowedOrigins []st
 		wsService: wsService,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
-				return originSet[r.Header.Get("Origin")]
+				// allow non-browser clients (no Origin); enforce the allow-list otherwise
+				origin := r.Header.Get("Origin")
+				return origin == "" || originSet[origin]
 			},
 		},
 	}
