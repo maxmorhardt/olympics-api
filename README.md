@@ -1,49 +1,31 @@
 # Olympics API
 
-Backend for a family "olympics" tournament: randomly pairs participants into teams,
-runs a round-robin group stage across multiple games (cornhole, darts, etc.), then
-seeds a single-elimination playoff bracket from the group standings.
+![Go](https://img.shields.io/badge/go-%2300ADD8.svg?style=for-the-badge&logo=go&logoColor=white)
+![Gin](https://img.shields.io/badge/gin-00ADD8?style=for-the-badge&logo=go&logoColor=white)
+![Kubernetes](https://img.shields.io/badge/kubernetes-%23326ce5.svg?style=for-the-badge&logo=kubernetes&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white)
+![WebSocket](https://img.shields.io/badge/websocket-010101?style=for-the-badge&logo=socketdotio&logoColor=white)
+![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)
 
-Go + Gin + GORM + PostgreSQL, following the `handler → service → repository` layering
-from `squares-api`.
+## Overview
+A backend for a family "olympics": an opinionated, one-off yard-games tournament built with Go and Gin. It randomly forms teams of 2, runs a round-robin group stage across three games (Darts, Bocce, Cornhole), and seeds a single-elimination playoff bracket, with real-time updates over WebSockets.
 
-## Tournament lifecycle
+## Features
+- **Fixed, opinionated format** - Teams of 2 (odd player makes a team of 3), groups of 6, everyone advances
+- **Team generation** - Participants are randomly shuffled into pairs
+- **Equipment-aware scheduling** - The group round-robin is packed into rounds that respect the available stations (2 darts, 2 bocce, 2 cornhole) so the whole field plays at once and each team's games stay balanced
+- **Record-based playoffs** - All teams advance; the bracket is seeded purely by wins, with equal records broken randomly
+- **Lifecycle state machine** - setup → teams_generated → group_stage → playoffs → finished
+- **Real-time updates** - In-process WebSocket hub broadcasts lifecycle changes, edits, and recorded scores (single replica, no NATS)
+- **OIDC Authentication** - Reads are public; writes require the tournament creator or an olympics admin
+- **PostgreSQL** - Data persistence with GORM; schema managed by versioned **golang-migrate** migrations applied at startup
 
-```
-setup → teams_generated → group_stage → playoffs → finished
-```
+## Dependencies
+This application requires the following services to be deployed:
+- **OIDC Provider** (Authentik) for authentication
+- **PostgreSQL** database for data persistence
 
-1. **Create** a tournament (configurable `teamSize`, `teamsPerGroup`, `advancePerGroup`, `gameTypes`).
-2. **Add participants** (a list of names).
-3. **Generate teams** — randomly shuffles participants into teams (default pairs; leftovers spread across teams so nobody is alone).
-4. **Generate groups** — randomly splits teams into balanced groups and builds a round-robin schedule, cycling through the configured games.
-5. Record results for each group match.
-6. **Generate playoffs** — once every group match is played, seeds the top `advancePerGroup` teams per group into a single-elimination bracket (byes for the top seeds when the field isn't a power of two).
-7. Record playoff results; winners auto-advance. Completing the final marks the tournament `finished`.
-
-## Running locally
-
-Copy `.env.example` to `.env` and fill in the Postgres connection, then:
-
-```sh
-make run
-```
-
-Migrations run automatically on startup (golang-migrate, embedded SQL in `internal/config/migrations`).
-
-## Endpoints
-
-| Method | Path | Description |
-| ------ | ---- | ----------- |
-| GET    | `/tournaments` | List tournaments |
-| POST   | `/tournaments` | Create a tournament |
-| GET    | `/tournaments/:id` | Get a tournament (participants, teams, groups) |
-| POST   | `/tournaments/:id/participants` | Add participants (`{"names": [...]}`) |
-| POST   | `/tournaments/:id/teams/generate` | Randomly generate teams |
-| POST   | `/tournaments/:id/groups/generate` | Generate groups + round-robin matches |
-| POST   | `/tournaments/:id/playoffs/generate` | Seed the playoff bracket |
-| GET    | `/tournaments/:id/standings` | Group standings |
-| GET    | `/tournaments/:id/bracket` | Playoff bracket |
-| GET    | `/tournaments/:id/matches` | All matches |
-| PATCH  | `/matches/:matchId/result` | Record a result (`{"teamAScore": x, "teamBScore": y}`) |
-| GET    | `/health/live`, `/health/ready` | Health checks |
+## Development
+1. Copy `.env.example` to `.env` and fill in the values
+2. Start required services (PostgreSQL, OIDC provider)
+3. Run the API with `make run` (run `make help` to list all available tasks)
