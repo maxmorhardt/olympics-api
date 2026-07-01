@@ -14,7 +14,6 @@ const (
 	WSTournamentDeleted WSType = "tournament_deleted"
 )
 
-// WSScore carries the detail needed to render a score popup on clients.
 type WSScore struct {
 	Stage      string `json:"stage"`
 	GameType   string `json:"gameType"`

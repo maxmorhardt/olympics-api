@@ -34,8 +34,6 @@ func NewWebSocketHandler(wsService service.WebSocketService, allowedOrigins []st
 	}
 }
 
-// Connect upgrades the request and joins the tournament's broadcast room.
-// Viewing is public, so no auth is required to subscribe.
 func (h *websocketHandler) Connect(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {

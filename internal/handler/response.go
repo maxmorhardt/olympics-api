@@ -10,7 +10,6 @@ import (
 	"github.com/maxmorhardt/olympics-api/internal/util"
 )
 
-// respondServiceError maps a service-layer sentinel error to an HTTP status.
 func respondServiceError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, errs.ErrTournamentNotFound),
@@ -44,7 +43,6 @@ func writeError(c *gin.Context, code int, err error) {
 	c.JSON(code, model.NewAPIError(code, util.CapitalizeFirstLetter(err), c))
 }
 
-// actor returns the authenticated username and whether they are an olympics admin.
 func actor(c *gin.Context) (user string, isAdmin bool) {
 	user = c.GetString(model.UserKey)
 	if claims := util.ClaimsFromContext(c.Request.Context()); claims != nil {

@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
-
 type Team struct {
 	ID           uuid.UUID     `json:"id" gorm:"type:uuid;primaryKey"`
 	TournamentID uuid.UUID     `json:"tournamentId" gorm:"type:uuid;index;not null"`

@@ -1,9 +1,6 @@
 package model
 
 import "github.com/google/uuid"
-
-// TeamStanding is one row of a group's standings table, computed from completed
-// group-stage matches.
 type TeamStanding struct {
 	TeamID        uuid.UUID `json:"teamId"`
 	TeamName      string    `json:"teamName"`

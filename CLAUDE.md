@@ -36,8 +36,8 @@ If a requirement seems to conflict with these, the constants in `tournament_serv
 
 - Language: **Go 1.26.x** (see [go.mod](go.mod)).
 - **Prefer `make <target>`.** `make run`, `make build`, `make vet`, `make verify` (`go mod verify`), `make lint` (golangci-lint, config in [.golangci.yml](.golangci.yml)), `make tidy`.
-- Migrations: **golang-migrate** SQL files in `internal/config/migrations/`, embedded via `go:embed` and applied on startup. Tracking uses a dedicated `olympics_schema_migrations` table (see `migrate.go`) so it never collides with another service sharing the database. Create a pair with `make migrate-create NAME=add_foo`; `make migrate-up`/`migrate-down` (set `DATABASE_URL`) for manual ops. **Change a model and add a migration** — models do not drive the schema.
-- **No tests, no metrics/Prometheus, no swagger, no NATS** — this is a small single-replica app. Do not add these unless explicitly asked.
+- Migrations: **golang-migrate** SQL files in `internal/config/migrations/`, embedded via `go:embed` and applied on startup. Tracking uses a dedicated `olympics_schema_migrations` table (see `migrate.go`) so it never collides with another service sharing the database. Create a pair with `make migrate-create NAME=add_foo`; `make migrate-up`/`migrate-down` (set `DATABASE_URL`) for manual ops. **Change a model and add a migration**; models do not drive the schema.
+- **No tests, no metrics/Prometheus, no swagger, no NATS**; this is a small single-replica app. Do not add these unless explicitly asked.
 - CI runs `make verify`, `make vet`, `golangci-lint`, `make build`, then builds/pushes the Docker image; keep all of those green.
 
 ## Architecture
@@ -52,7 +52,7 @@ Strict **handler → service → repository** layering:
 ## Authentication & authorization
 
 - OIDC config in `config/oidc.go`; `middleware.AuthMiddleware` validates the bearer token and stores `model.Claims` + username under context keys (`model/key.go`).
-- **Reads are public** (a shareable link is handed out); **all writes require auth**. Only an **olympics admin** (JWT group `olympics-admin`) may create a tournament. Every other mutation requires the tournament **creator or an admin** — enforced by `authorizeTournament` in the service layer.
+- **Reads are public** (a shareable link is handed out); **all writes require auth**. Only an **olympics admin** (JWT group `olympics-admin`) may create a tournament. Every other mutation requires the tournament **creator or an admin**; enforced by `authorizeTournament` in the service layer.
 - In handlers, get identity with `actor(c)` → `(user string, isAdmin bool)` and pass them down as plain values; services never depend on `*gin.Context`.
 
 ## Real-time (WebSockets, single replica, no NATS)
@@ -77,7 +77,7 @@ This is the trickiest code. `scheduleGroupMatches` builds a round-robin **1-fact
 ## Deployment
 
 - Image built from the [Dockerfile](Dockerfile) and pushed by CI on tag push. Runtime config via env (see `.env.example`): DB connection + `OIDC_CLIENT_ID` (`OIDC_ISSUER` defaults to the olympics Authentik app), supplied in-cluster via the `olympics-api-env` secret.
-- Single replica (`charts/olympics-api`, namespace `apps`). No HPA/PDB/metrics. Don't change the chart from this repo unless asked — coordinate via the `charts` workspace.
+- Single replica (`charts/olympics-api`, namespace `apps`). No HPA/PDB/metrics. Don't change the chart from this repo unless asked; coordinate via the `charts` workspace.
 
 ## Commit conventions
 
