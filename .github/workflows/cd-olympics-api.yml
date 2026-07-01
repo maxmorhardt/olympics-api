@@ -1,0 +1,27 @@
+name: Olympics API CD
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Docker image tag to deploy'
+        required: false
+        type: string
+        default: ''
+      chart_version:
+        description: 'Helm chart version'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  cd:
+    uses: maxmorhardt/workflows/.github/workflows/cd-helm.yml@main
+    with:
+      repository: maxmorhardt/${{ github.event.repository.name }}
+      release_name: ${{ github.event.repository.name }}
+      namespace: apps
+      chart: oci://docker.io/maxmorhardt/${{ github.event.repository.name }}-chart
+      chart_version: ${{ inputs.chart_version }}
+      image_tag: ${{ inputs.image_tag }}
+    secrets: inherit

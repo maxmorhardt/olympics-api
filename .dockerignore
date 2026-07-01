@@ -1,0 +1,14 @@
+.git
+.gitignore
+.github
+.vscode
+.idea
+bin/
+coverage.out
+coverage.html
+*.md
+.env
+.env.*
+**/*_test.go
+Dockerfile
+.dockerignore

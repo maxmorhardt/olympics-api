@@ -14,7 +14,6 @@ type Claims struct {
 	IssuedAt int64    `json:"iat"`
 }
 
-// IsAdmin reports whether the caller belongs to the olympics-admin group.
 func (c *Claims) IsAdmin() bool {
 	for _, g := range c.Groups {
 		if g == OlympicsAdminGroup {

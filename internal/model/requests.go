@@ -1,11 +1,7 @@
 package model
 
 type CreateTournamentRequest struct {
-	Name            string   `json:"name"`
-	TeamSize        int      `json:"teamSize"`
-	TeamsPerGroup   int      `json:"teamsPerGroup"`
-	AdvancePerGroup int      `json:"advancePerGroup"`
-	GameTypes       []string `json:"gameTypes"`
+	Name string `json:"name"`
 }
 
 type AddParticipantsRequest struct {
@@ -15,4 +11,13 @@ type AddParticipantsRequest struct {
 type RecordMatchResultRequest struct {
 	TeamAScore int `json:"teamAScore"`
 	TeamBScore int `json:"teamBScore"`
+}
+
+type UpdateNameRequest struct {
+	Name string `json:"name"`
+}
+
+type SwapPlayersRequest struct {
+	ParticipantAId string `json:"participantAId"`
+	ParticipantBId string `json:"participantBId"`
 }

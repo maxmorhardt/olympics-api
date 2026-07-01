@@ -20,12 +20,14 @@ type MatchService interface {
 type matchService struct {
 	matchRepo      repository.MatchRepository
 	tournamentRepo repository.TournamentRepository
+	broadcaster    Broadcaster
 }
 
-func NewMatchService(matchRepo repository.MatchRepository, tournamentRepo repository.TournamentRepository) MatchService {
+func NewMatchService(matchRepo repository.MatchRepository, tournamentRepo repository.TournamentRepository, broadcaster Broadcaster) MatchService {
 	return &matchService{
 		matchRepo:      matchRepo,
 		tournamentRepo: tournamentRepo,
+		broadcaster:    broadcaster,
 	}
 }
 
@@ -91,8 +93,51 @@ func (s *matchService) RecordResult(ctx context.Context, matchID uuid.UUID, req 
 		}
 	}
 
+	// reload to capture preloaded team names and the (possibly transitioned) status
+	updated, err := s.matchRepo.GetByID(ctx, matchID)
+	if err != nil {
+		return nil, err
+	}
+	s.broadcastScore(ctx, updated)
+
 	log.Info("recorded match result", "match_id", matchID, "winner", match.WinnerTeamID)
-	return s.matchRepo.GetByID(ctx, matchID)
+	return updated, nil
+}
+
+func (s *matchService) broadcastScore(ctx context.Context, match *model.Match) {
+	// default from the match stage so a DB error does not misreport the stage
+	status := model.TournamentStatusGroupStage
+	if match.Stage == model.MatchStagePlayoff {
+		status = model.TournamentStatusPlayoffs
+	}
+	if t, err := s.tournamentRepo.GetByID(ctx, match.TournamentID); err == nil {
+		status = t.Status
+	}
+
+	teamAName := teamNameOrTBD(match.TeamA)
+	teamBName := teamNameOrTBD(match.TeamB)
+	winnerName := teamAName
+	if match.WinnerTeamID != nil && match.TeamBID != nil && *match.WinnerTeamID == *match.TeamBID {
+		winnerName = teamBName
+	}
+
+	score := &model.WSScore{
+		Stage:      string(match.Stage),
+		GameType:   match.GameType,
+		TeamAName:  teamAName,
+		TeamBName:  teamBName,
+		TeamAScore: match.TeamAScore,
+		TeamBScore: match.TeamBScore,
+		WinnerName: winnerName,
+	}
+	s.broadcaster.Broadcast(match.TournamentID, model.NewScoreRecorded(match.TournamentID, status, score))
+}
+
+func teamNameOrTBD(t *model.Team) string {
+	if t == nil {
+		return "TBD"
+	}
+	return t.Name
 }
 
 func (s *matchService) advanceWinner(ctx context.Context, match *model.Match) error {

@@ -2,10 +2,6 @@ CREATE TABLE IF NOT EXISTS tournaments (
     id uuid PRIMARY KEY,
     name text NOT NULL,
     status text NOT NULL DEFAULT 'setup',
-    team_size integer NOT NULL DEFAULT 2,
-    teams_per_group integer NOT NULL DEFAULT 4,
-    advance_per_group integer NOT NULL DEFAULT 2,
-    game_types jsonb,
     created_by text,
     created_at timestamptz,
     updated_at timestamptz

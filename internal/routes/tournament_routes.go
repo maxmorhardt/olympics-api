@@ -18,8 +18,11 @@ func RegisterTournamentRoutes(rg *gin.RouterGroup, h handler.TournamentHandler, 
 
 	// mutations require a logged-in creator (or olympics admin)
 	rg.POST("", auth, h.CreateTournament)
+	rg.DELETE("/:id", auth, h.DeleteTournament)
 	rg.POST("/:id/participants", auth, h.AddParticipants)
 	rg.POST("/:id/teams/generate", auth, h.GenerateTeams)
+	rg.PATCH("/:id/teams/:teamId", auth, h.UpdateTeam)
+	rg.POST("/:id/teams/swap", auth, h.SwapPlayers)
 	rg.POST("/:id/groups/generate", auth, h.GenerateGroups)
 	rg.POST("/:id/playoffs/generate", auth, h.GeneratePlayoffs)
 }

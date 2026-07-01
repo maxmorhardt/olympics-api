@@ -26,8 +26,6 @@ func migrationDatabaseURL(cfg *Config) string {
 	}
 	q := u.Query()
 	q.Set("sslmode", cfg.DB.SSLMode)
-	// track migrations in a dedicated table so olympics versioning stays
-	// independent of any other service sharing the same database
 	q.Set("x-migrations-table", "olympics_schema_migrations")
 	u.RawQuery = q.Encode()
 	return u.String()

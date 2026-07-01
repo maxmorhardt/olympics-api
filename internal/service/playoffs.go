@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"math/bits"
+	"math/rand/v2"
+	"sort"
 
 	"github.com/google/uuid"
 	"github.com/maxmorhardt/olympics-api/internal/errs"
@@ -45,12 +47,12 @@ func (s *tournamentService) GeneratePlayoffs(ctx context.Context, id uuid.UUID, 
 	}
 
 	standings := computeStandings(tournament.Groups, groupMatches)
-	qualifiers := seedQualifiers(standings, tournament.AdvancePerGroup)
+	qualifiers := seedQualifiers(standings)
 	if len(qualifiers) < 2 {
 		return nil, errs.ErrInvalidStatus
 	}
 
-	matches := buildBracket(id, qualifiers, s.gameTypes(tournament))
+	matches := buildBracket(id, qualifiers, groupGames)
 
 	if err := s.matchRepo.Create(ctx, matches); err != nil {
 		log.Error("failed to persist playoff matches", "tournament_id", id, "error", err)
@@ -61,35 +63,32 @@ func (s *tournamentService) GeneratePlayoffs(ctx context.Context, id uuid.UUID, 
 		return nil, err
 	}
 
+	s.broadcaster.Broadcast(id, model.NewTournamentUpdated(id, model.TournamentStatusPlayoffs))
 	log.Info("generated playoffs", "tournament_id", id, "qualifiers", len(qualifiers), "matches", len(matches))
 	return s.matchRepo.GetByTournamentAndStage(ctx, id, model.MatchStagePlayoff)
 }
 
-// seedQualifiers picks the top advancePerGroup teams from each group and returns
-// them in global seed order: all group winners first (best record first), then
-// all runners-up, and so on.
-func seedQualifiers(standings []model.GroupStandings, advancePerGroup int) []uuid.UUID {
-	var qualifiers []uuid.UUID
-
-	for rank := 0; rank < advancePerGroup; rank++ {
-		atRank := make([]model.TeamStanding, 0, len(standings))
-		for _, gs := range standings {
-			if rank < len(gs.Standings) {
-				atRank = append(atRank, gs.Standings[rank])
-			}
-		}
-		sortStandings(atRank)
-		for _, ts := range atRank {
-			qualifiers = append(qualifiers, ts.TeamID)
-		}
+func seedQualifiers(standings []model.GroupStandings) []uuid.UUID {
+	var rows []model.TeamStanding
+	for _, gs := range standings {
+		rows = append(rows, gs.Standings...)
 	}
 
+	// shuffle first so equal-win ties resolve randomly under the stable sort
+	rand.Shuffle(len(rows), func(i, j int) {
+		rows[i], rows[j] = rows[j], rows[i]
+	})
+	sort.SliceStable(rows, func(i, j int) bool {
+		return rows[i].Wins > rows[j].Wins
+	})
+
+	qualifiers := make([]uuid.UUID, len(rows))
+	for i, r := range rows {
+		qualifiers[i] = r.TeamID
+	}
 	return qualifiers
 }
 
-// buildBracket creates a full single-elimination bracket for the seeded
-// qualifiers, padding to a power of two with byes for the top seeds and linking
-// each match to the next round via NextMatchID/NextSlot.
 func buildBracket(tournamentID uuid.UUID, qualifiers []uuid.UUID, gameTypes []string) []*model.Match {
 	q := len(qualifiers)
 	bracketSize := 1
@@ -177,8 +176,7 @@ func buildBracket(tournamentID uuid.UUID, qualifiers []uuid.UUID, gameTypes []st
 		}
 	}
 
-	// flatten final-round-first so a match is always inserted after the match it
-	// references via NextMatchID (satisfies the self-referential foreign key)
+	// flatten final-round-first so each match is inserted after the one it references
 	var matches []*model.Match
 	for r := rounds; r >= 1; r-- {
 		matches = append(matches, matchesByRound[r]...)
@@ -187,9 +185,6 @@ func buildBracket(tournamentID uuid.UUID, qualifiers []uuid.UUID, gameTypes []st
 	return matches
 }
 
-// seedPositions returns the seed number (1-based) sitting at each bracket
-// position for a bracket of the given power-of-two size, using standard
-// tournament seeding so the top seeds are spread apart.
 func seedPositions(size int) []int {
 	seeds := []int{1}
 	for len(seeds) < size {

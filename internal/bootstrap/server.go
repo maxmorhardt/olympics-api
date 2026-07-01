@@ -64,14 +64,17 @@ func setupRoutes(r *gin.Engine, deps *Dependencies) {
 	tournamentRepo := repository.NewTournamentRepository(db)
 	matchRepo := repository.NewMatchRepository(db)
 
-	tournamentService := service.NewTournamentService(tournamentRepo, matchRepo)
-	matchService := service.NewMatchService(matchRepo, tournamentRepo)
+	wsService := service.NewWebSocketService()
+	tournamentService := service.NewTournamentService(tournamentRepo, matchRepo, wsService)
+	matchService := service.NewMatchService(matchRepo, tournamentRepo, wsService)
 
 	tournamentHandler := handler.NewTournamentHandler(tournamentService)
 	matchHandler := handler.NewMatchHandler(matchService)
+	wsHandler := handler.NewWebSocketHandler(wsService, deps.Config.Server.AllowedOrigins)
 	healthHandler := handler.NewHealthHandler(db)
 
 	routes.RegisterRootRoutes(r.Group(""), healthHandler)
 	routes.RegisterTournamentRoutes(r.Group("/tournaments"), tournamentHandler, matchHandler, deps.Verifier)
 	routes.RegisterMatchRoutes(r.Group("/matches"), matchHandler, deps.Verifier)
+	routes.RegisterWebSocketRoutes(r.Group("/ws"), wsHandler)
 }
