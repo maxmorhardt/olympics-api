@@ -33,7 +33,16 @@ func NewMatchService(matchRepo repository.MatchRepository, tournamentRepo reposi
 }
 
 func (s *matchService) GetMatches(ctx context.Context, tournamentID uuid.UUID) ([]model.Match, error) {
-	return s.matchRepo.GetByTournament(ctx, tournamentID)
+	log := util.LoggerFromContext(ctx)
+
+	matches, err := s.matchRepo.GetByTournament(ctx, tournamentID)
+	if err != nil {
+		log.Error("failed to get matches", "tournament_id", tournamentID, "error", err)
+		return nil, err
+	}
+
+	log.Info("retrieved matches", "tournament_id", tournamentID, "count", len(matches))
+	return matches, nil
 }
 
 func (s *matchService) RecordResult(ctx context.Context, matchID uuid.UUID, req *model.RecordMatchResultRequest, user string, isAdmin bool) (*model.Match, error) {
@@ -171,7 +180,11 @@ func (s *matchService) RollbackResult(ctx context.Context, matchID uuid.UUID, us
 		return nil, errs.ErrRollbackLocked
 	}
 
+	// figure out the side effects, then persist them atomically below
 	newStatus := tournament.Status
+	var statusChange *model.TournamentStatus
+	var next *model.Match
+
 	if match.Stage == model.MatchStageGroup {
 		// group scores lock once the bracket exists
 		if tournament.Status != model.TournamentStatusGroupStage {
@@ -179,35 +192,31 @@ func (s *matchService) RollbackResult(ctx context.Context, matchID uuid.UUID, us
 		}
 	} else if match.NextMatchID != nil {
 		// cannot undo once the winner's next game has been played
-		next, err := s.matchRepo.GetByID(ctx, *match.NextMatchID)
+		n, err := s.matchRepo.GetByID(ctx, *match.NextMatchID)
 		if err != nil {
 			return nil, err
 		}
-		if next.Status == model.MatchStatusCompleted {
+		if n.Status == model.MatchStatusCompleted {
 			return nil, errs.ErrRollbackLocked
 		}
 		if match.NextSlot == "b" {
-			next.TeamBID = nil
+			n.TeamBID = nil
 		} else {
-			next.TeamAID = nil
+			n.TeamAID = nil
 		}
-		if err := s.matchRepo.Update(ctx, next); err != nil {
-			log.Error("failed to clear next match slot", "match_id", matchID, "error", err)
-			return nil, err
-		}
+		next = n
 	} else if tournament.Status == model.TournamentStatusFinished {
 		// undoing the final reopens the playoffs
 		newStatus = model.TournamentStatusPlayoffs
-		if err := s.tournamentRepo.UpdateStatus(ctx, tournament.ID, newStatus); err != nil {
-			return nil, err
-		}
+		statusChange = &newStatus
 	}
 
 	match.Status = model.MatchStatusPending
 	match.TeamAScore = 0
 	match.TeamBScore = 0
 	match.WinnerTeamID = nil
-	if err := s.matchRepo.Update(ctx, match); err != nil {
+
+	if err := s.matchRepo.RollbackResult(ctx, match, next, tournament.ID, statusChange); err != nil {
 		log.Error("failed to roll back match result", "match_id", matchID, "error", err)
 		return nil, err
 	}

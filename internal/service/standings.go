@@ -6,9 +6,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/maxmorhardt/olympics-api/internal/model"
+	"github.com/maxmorhardt/olympics-api/internal/util"
 )
 
 func (s *tournamentService) GetStandings(ctx context.Context, id uuid.UUID) ([]model.GroupStandings, error) {
+	log := util.LoggerFromContext(ctx)
+
 	tournament, err := s.GetTournament(ctx, id)
 	if err != nil {
 		return nil, err
@@ -16,10 +19,13 @@ func (s *tournamentService) GetStandings(ctx context.Context, id uuid.UUID) ([]m
 
 	matches, err := s.matchRepo.GetByTournamentAndStage(ctx, id, model.MatchStageGroup)
 	if err != nil {
+		log.Error("failed to get group matches for standings", "tournament_id", id, "error", err)
 		return nil, err
 	}
 
-	return computeStandings(tournament.Groups, matches), nil
+	standings := computeStandings(tournament.Groups, matches)
+	log.Info("retrieved standings", "tournament_id", id, "groups", len(standings))
+	return standings, nil
 }
 
 func computeStandings(groups []model.Group, matches []model.Match) []model.GroupStandings {

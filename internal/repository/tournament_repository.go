@@ -20,11 +20,23 @@ type TournamentRepository interface {
 	UpdateStatus(ctx context.Context, id uuid.UUID, status model.TournamentStatus) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	AddParticipants(ctx context.Context, participants []*model.Participant) error
+	UpdateParticipantName(ctx context.Context, participantID uuid.UUID, name string) error
+	DeleteParticipant(ctx context.Context, participantID uuid.UUID) error
 	UpdateTeamName(ctx context.Context, teamID uuid.UUID, name string) error
 	SwapPlayers(ctx context.Context, aID, aTeamID, bID, bTeamID uuid.UUID) error
+	ApplyRosterChange(ctx context.Context, tournamentID uuid.UUID, ch RosterChange) error
 
 	CreateTeamsAndAssign(ctx context.Context, teams []*model.Team, participants []*model.Participant) error
 	CreateGroupsAndAssign(ctx context.Context, groups []*model.Group, teams []*model.Team) error
+}
+
+type RosterChange struct {
+	Wipe              bool
+	NewTeam           *model.Team
+	NewParticipant    *model.Participant
+	DeleteParticipant *uuid.UUID
+	DeleteTeam        *uuid.UUID
+	Reassign          map[uuid.UUID]uuid.UUID
 }
 
 type tournamentRepository struct {
@@ -126,6 +138,69 @@ func (r *tournamentRepository) AddParticipants(ctx context.Context, participants
 		return nil
 	}
 	return r.db.WithContext(ctx).Create(participants).Error
+}
+
+func (r *tournamentRepository) UpdateParticipantName(ctx context.Context, participantID uuid.UUID, name string) error {
+	return r.db.WithContext(ctx).
+		Model(&model.Participant{}).
+		Where("id = ?", participantID).
+		Update("name", name).Error
+}
+
+func (r *tournamentRepository) DeleteParticipant(ctx context.Context, participantID uuid.UUID) error {
+	return r.db.WithContext(ctx).Delete(&model.Participant{}, "id = ?", participantID).Error
+}
+
+func (r *tournamentRepository) ApplyRosterChange(ctx context.Context, tournamentID uuid.UUID, ch RosterChange) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if ch.Wipe {
+			// clear the schedule and unlink teams from their (now stale) groups
+			if err := tx.Where("tournament_id = ?", tournamentID).Delete(&model.Match{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("tournament_id = ?", tournamentID).Delete(&model.Group{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&model.Team{}).Where("tournament_id = ?", tournamentID).
+				Updates(map[string]any{"group_id": nil, "seed": 0}).Error; err != nil {
+				return err
+			}
+		}
+
+		// create a new team before anything is reassigned onto it
+		if ch.NewTeam != nil {
+			if err := tx.Create(ch.NewTeam).Error; err != nil {
+				return err
+			}
+		}
+		for participantID, teamID := range ch.Reassign {
+			if err := tx.Model(&model.Participant{}).Where("id = ?", participantID).Update("team_id", teamID).Error; err != nil {
+				return err
+			}
+		}
+		if ch.NewParticipant != nil {
+			if err := tx.Create(ch.NewParticipant).Error; err != nil {
+				return err
+			}
+		}
+		if ch.DeleteParticipant != nil {
+			if err := tx.Delete(&model.Participant{}, "id = ?", *ch.DeleteParticipant).Error; err != nil {
+				return err
+			}
+		}
+		// delete an emptied team only after its members have moved off it
+		if ch.DeleteTeam != nil {
+			if err := tx.Delete(&model.Team{}, "id = ?", *ch.DeleteTeam).Error; err != nil {
+				return err
+			}
+		}
+
+		if ch.Wipe {
+			return tx.Model(&model.Tournament{}).Where("id = ?", tournamentID).
+				Update("status", model.TournamentStatusTeamsGenerated).Error
+		}
+		return nil
+	})
 }
 
 func (r *tournamentRepository) CreateTeamsAndAssign(ctx context.Context, teams []*model.Team, participants []*model.Participant) error {

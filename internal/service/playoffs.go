@@ -200,8 +200,18 @@ func seedPositions(size int) []int {
 }
 
 func (s *tournamentService) GetBracket(ctx context.Context, id uuid.UUID) ([]model.Match, error) {
+	log := util.LoggerFromContext(ctx)
+
 	if _, err := s.GetTournament(ctx, id); err != nil {
 		return nil, err
 	}
-	return s.matchRepo.GetByTournamentAndStage(ctx, id, model.MatchStagePlayoff)
+
+	bracket, err := s.matchRepo.GetByTournamentAndStage(ctx, id, model.MatchStagePlayoff)
+	if err != nil {
+		log.Error("failed to get bracket", "tournament_id", id, "error", err)
+		return nil, err
+	}
+
+	log.Info("retrieved bracket", "tournament_id", id, "matches", len(bracket))
+	return bracket, nil
 }

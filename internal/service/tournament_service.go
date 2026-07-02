@@ -21,6 +21,9 @@ type TournamentService interface {
 
 	CreateTournament(ctx context.Context, req *model.CreateTournamentRequest, user string, isAdmin bool) (*model.Tournament, error)
 	AddParticipants(ctx context.Context, id uuid.UUID, names []string, user string, isAdmin bool) (*model.Tournament, error)
+	AddParticipant(ctx context.Context, id uuid.UUID, name string, user string, isAdmin bool) (*model.Tournament, error)
+	UpdateParticipant(ctx context.Context, id, participantID uuid.UUID, name string, user string, isAdmin bool) (*model.Tournament, error)
+	DeleteParticipant(ctx context.Context, id, participantID uuid.UUID, user string, isAdmin bool) (*model.Tournament, error)
 
 	GenerateTeams(ctx context.Context, id uuid.UUID, user string, isAdmin bool) ([]model.Team, error)
 	GenerateGroups(ctx context.Context, id uuid.UUID, user string, isAdmin bool) ([]model.Group, error)
@@ -54,8 +57,7 @@ const (
 	teamsPerGroup = 6
 )
 
-// The three games and how many can run at once given the available equipment:
-// two of every station, so up to six games (twelve teams) run simultaneously.
+// two of every station, so up to six games run at once
 var groupGames = []string{"Darts", "Bocce", "Cornhole"}
 
 var gameCapacity = map[string]int{
@@ -65,17 +67,31 @@ var gameCapacity = map[string]int{
 }
 
 func (s *tournamentService) GetTournaments(ctx context.Context) ([]model.Tournament, error) {
-	return s.repo.GetAll(ctx)
+	log := util.LoggerFromContext(ctx)
+
+	tournaments, err := s.repo.GetAll(ctx)
+	if err != nil {
+		log.Error("failed to get tournaments", "error", err)
+		return nil, err
+	}
+
+	log.Info("retrieved tournaments", "count", len(tournaments))
+	return tournaments, nil
 }
 
 func (s *tournamentService) GetTournament(ctx context.Context, id uuid.UUID) (*model.Tournament, error) {
+	log := util.LoggerFromContext(ctx)
+
 	tournament, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errs.ErrTournamentNotFound
 		}
+		log.Error("failed to get tournament", "tournament_id", id, "error", err)
 		return nil, err
 	}
+
+	log.Info("retrieved tournament", "tournament_id", id)
 	return tournament, nil
 }
 
@@ -296,8 +312,8 @@ func (s *tournamentService) SwapPlayers(ctx context.Context, id, participantAID,
 		return nil, err
 	}
 
-	// swapping is only safe before groups and the schedule are built
-	if tournament.Status != model.TournamentStatusTeamsGenerated {
+	// swapping only rearranges people within existing teams, so results stay valid
+	if tournament.Status == model.TournamentStatusSetup || tournament.Status == model.TournamentStatusFinished {
 		return nil, errs.ErrInvalidStatus
 	}
 

@@ -16,10 +16,15 @@ func LoggerMiddleware(c *gin.Context) {
 		requestID = uuid.New().String()
 	}
 
+	cfRay := c.GetHeader("Cf-Ray")
+	cfCountry := c.GetHeader("Cf-Ipcountry")
+
 	// create logger with request metadata
 	log := slog.Default().With(
 		"request_id", requestID,
 		"client_ip", c.ClientIP(),
+		"cf_ray", cfRay,
+		"cf_country", cfCountry,
 	)
 
 	// store request id and logger in context

@@ -16,6 +16,7 @@ type MatchRepository interface {
 
 	Create(ctx context.Context, matches []*model.Match) error
 	Update(ctx context.Context, match *model.Match) error
+	RollbackResult(ctx context.Context, match, next *model.Match, tournamentID uuid.UUID, newStatus *model.TournamentStatus) error
 }
 
 type matchRepository struct {
@@ -77,4 +78,20 @@ func (r *matchRepository) Create(ctx context.Context, matches []*model.Match) er
 
 func (r *matchRepository) Update(ctx context.Context, match *model.Match) error {
 	return r.db.WithContext(ctx).Save(match).Error
+}
+
+func (r *matchRepository) RollbackResult(ctx context.Context, match, next *model.Match, tournamentID uuid.UUID, newStatus *model.TournamentStatus) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if newStatus != nil {
+			if err := tx.Model(&model.Tournament{}).Where("id = ?", tournamentID).Update("status", *newStatus).Error; err != nil {
+				return err
+			}
+		}
+		if next != nil {
+			if err := tx.Save(next).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Save(match).Error
+	})
 }
