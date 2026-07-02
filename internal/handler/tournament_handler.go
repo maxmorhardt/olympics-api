@@ -15,6 +15,9 @@ type TournamentHandler interface {
 	GetTournament(c *gin.Context)
 	CreateTournament(c *gin.Context)
 	AddParticipants(c *gin.Context)
+	AddParticipant(c *gin.Context)
+	UpdateParticipant(c *gin.Context)
+	DeleteParticipant(c *gin.Context)
 	GenerateTeams(c *gin.Context)
 	GenerateGroups(c *gin.Context)
 	GeneratePlayoffs(c *gin.Context)
@@ -88,6 +91,71 @@ func (h *tournamentHandler) AddParticipants(c *gin.Context) {
 
 	user, isAdmin := actor(c)
 	tournament, err := h.tournamentService.AddParticipants(c.Request.Context(), id, req.Names, user, isAdmin)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, tournament)
+}
+
+func (h *tournamentHandler) AddParticipant(c *gin.Context) {
+	id, ok := parseID(c, "id")
+	if !ok {
+		return
+	}
+
+	var req model.UpdateNameRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, errs.ErrInvalidRequestBody)
+		return
+	}
+
+	user, isAdmin := actor(c)
+	tournament, err := h.tournamentService.AddParticipant(c.Request.Context(), id, req.Name, user, isAdmin)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, tournament)
+}
+
+func (h *tournamentHandler) UpdateParticipant(c *gin.Context) {
+	id, ok := parseID(c, "id")
+	if !ok {
+		return
+	}
+	participantID, ok := parseID(c, "participantId")
+	if !ok {
+		return
+	}
+
+	var req model.UpdateNameRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, errs.ErrInvalidRequestBody)
+		return
+	}
+
+	user, isAdmin := actor(c)
+	tournament, err := h.tournamentService.UpdateParticipant(c.Request.Context(), id, participantID, req.Name, user, isAdmin)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, tournament)
+}
+
+func (h *tournamentHandler) DeleteParticipant(c *gin.Context) {
+	id, ok := parseID(c, "id")
+	if !ok {
+		return
+	}
+	participantID, ok := parseID(c, "participantId")
+	if !ok {
+		return
+	}
+
+	user, isAdmin := actor(c)
+	tournament, err := h.tournamentService.DeleteParticipant(c.Request.Context(), id, participantID, user, isAdmin)
 	if err != nil {
 		respondServiceError(c, err)
 		return
